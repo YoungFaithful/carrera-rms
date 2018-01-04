@@ -10,6 +10,7 @@ Install all the dependencies:
 4. pip3 install setuptools
 5. pip3 install bluepy
 6. pip3 install pyqt5
+7. pip3 install Flask
 
 
 Starting the Application:
@@ -20,6 +21,11 @@ prompt> hcitool lescan
 
 Start the RMS with the CU Address as a command line option:
 prompt> python3 rms.py <CU BT Address>
+
+for example in Ubuntu:
+  python3 rms.py dev/ttyUSB0
+  
+ensure user has the rights to write and read ttyUSB0 otherwise give him rights to do so or use sudo
 
 or
 
