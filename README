@@ -10,7 +10,7 @@ Install all the dependencies:
 4. pip3 install setuptools
 5. pip3 install bluepy
 6. pip3 install pyqt5
-7. pip3 install Flask
+7. pip3 install flask
 
 
 Starting the Application:
