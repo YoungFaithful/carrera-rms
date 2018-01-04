@@ -11,6 +11,7 @@ Install all the dependencies:
 5. pip3 install bluepy
 6. pip3 install pyqt5
 7. pip3 install flask
+8. pip3 install python-vlc
 
 
 Starting the Application:
