@@ -1,0 +1,42 @@
+<html>
+    <head>
+        <title>{{ title }} - Microblog</title>
+    	<!-- Custom styles for this template -->
+    	<link href="static/css/wrapper.css" rel="stylesheet">
+    </head>
+    <body>
+<body>
+<div class="wrapper">
+  <div class="box posn">Position</div>
+  <div class="box pos">{{ position }}</div>
+  <div class="box ttn">Total Time</div>
+  <div class="box tt">{{ totaltime }}</div>
+  <div class="box lon">Laps</div>
+  <div class="box lo">{{ laps }}</div>
+  <div class="box ltn">Laptime</div>
+  <div class="box lt">{{ laptime }}</div>
+  <div class="box n">{{ name }}</div>
+  <div class="box bltn">Best Lap Time</div>
+  <div class="box blt">{{ bestlaptime }}</div>
+  <div class="box fln">Fuellevel</div>
+  <div class="box fl">
+    <div class="lights">
+      <div class="box light1">{{ fuellevellights1 }}</div>
+      <div class="box light2">{{ fuellevellights2 }}</div>
+    </div>
+  </div>
+  <div class="box pitn">Pits</div>
+  <div class="box pit">{{ pits }}</div>
+</div>
+</body>
+<script>
+<!--
+function timedRefresh(timeoutPeriod) {
+	setTimeout("location.reload(true);",timeoutPeriod);
+}
+
+window.onload = timedRefresh(2000);
+
+//   -->
+</script>
+</html>

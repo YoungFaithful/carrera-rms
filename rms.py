@@ -2,6 +2,12 @@
 """ Copyright 2017 Thomas Reich thomas@geekazoids.net """
 """ V1.0 Initial release """
 """ V1.0.1 Formatting of display, outputs and other display improvements """
+#For webpage
+from flask import (Flask, render_template)
+PORT=5000
+
+#For threading
+from threading import Thread
 
 from PyQt5.QtWidgets import (
      QApplication,
@@ -36,7 +42,8 @@ from PyQt5.QtCore import (
      QByteArray,
      pyqtProperty,
      QPropertyAnimation,
-     Qt
+     Qt,
+     QThread
 )
 
 try:
@@ -64,7 +71,7 @@ import vlc
 # To wait
 import time
 
-
+#For audio output use the folder 'sounds'
 class Audio:
     def __init__(self):
         self.list_songnames=os.listdir(os.path.realpath('sounds'))
@@ -80,6 +87,7 @@ class Audio:
         self.songs[songname].stop()
         self.songs[songname].play()
 
+
 def posgetter(driver):
     return (-driver.lapcount, driver.time)
     
@@ -89,7 +97,7 @@ def CtrlNum(driver):
 #Return Format and time
 def formattime(time, longfmt):
     if time is None:
-        return '0.0'
+        return '--.---'
     s = time // 1000
     ms = time % 1000
 
@@ -299,7 +307,10 @@ class Rms(QMainWindow):
             self.startLights.hide()
         for driver, fuel in zip(self.rmsframe.driverArr, status.fuel):
             if not driver.fuellevel == fuel and driver.pit:
-               audio.play("tank")
+                if fuel==15:
+                    audio.play("last")
+                else:
+                    audio.play("tank")
             driver.fuellevel=fuel
         for driver, pit in zip(self.rmsframe.driverArr, status.pit):
             if pit and not driver.pit:
@@ -627,8 +638,12 @@ class RmsFrame(QFrame):
         self.ctrlDialog = CtrlDialog(self.driverArr)
         if self.ctrlDialog.exec_():
             self.driverArr = self.ctrlDialog.newDriverArr
-
+#Prepare Race and open dialog
     def openRaceDlg(self):
+        # Refuel all cars to same amount
+        self.setFuel()
+        time.sleep(0.5)
+        self.racestart()
         self.setupRaceDlg = RaceModeDialog()
         self.session.session = None
         self.session.type = None
@@ -795,6 +810,7 @@ class RmsFrame(QFrame):
         # Refresh positions and leading time
         #Sorted by position
         for pos, driver in enumerate(sorted(driversInPlay, key=posgetter), start=1):
+            #Calculate Position and Gap
             if pos == 1:
                 if hasattr(self, 'leader') and self.leader != driver:
                     print('pos change')
@@ -806,23 +822,45 @@ class RmsFrame(QFrame):
             else:
                 gap = self.leader.lapcount - driver.lapcount
                 t = '+%d Lap%s' % (gap, 's' if gap != 1 else '')
+            #Position to qt app and web app
             self.driverPos[pos].setText('#'+str(pos)+'\n'+driver.name)
+            web.position[driver.CtrlNum]='#'+str(pos)
+            #Totaltime
             self.totalTime[pos].setText(t)
+            web.totaltime[driver.CtrlNum]=t
         #Sorted by Controller number
         for pos, driver in enumerate(sorted(driversInPlay, key=CtrlNum), start=1):
+            #Name
             self.nameBtn[pos].setText(driver.name + '\n' + str(driver.CtrlNum))
+            web.name[driver.CtrlNum]=driver.name
             if self.session.lapcountup or self.session.amount == None:
                 self.lapcount[pos].display(driver.lapcount)
+                web.laps[driver.CtrlNum]=driver.lapcount
             else:
                 self.lapcount[pos].display(self.session.amount-driver.lapcount)
-                
+                web.laps[driver.CtrlNum]=self.session.amount-driver.lapcount
+            #Laptime to qt app and web app    
             self.laptime[pos].display(formattime(driver.lapTime, False))
-            self.bestlaptime[pos].display(formattime(driver.bestLapTime, False))
+            web.laptime[driver.CtrlNum]=formattime(driver.lapTime, True)
+            #Best Lap time to qt app and web app
+            self.bestlaptime[pos].display(formattime(driver.bestLapTime, False))            
+            web.bestlaptime[driver.CtrlNum]=formattime(driver.bestLapTime, True)
+            #Fuelbar
             self.fuelbar[pos].setValue(driver.fuellevel)
+            #Make the dots for the web app
+            if driver.fuellevel > 5:
+                web.fuellevellights1[driver.CtrlNum]='⣿⣿⣿⣿⣿'
+                web.fuellevellights2[driver.CtrlNum]='⣿'*(driver.fuellevel-5)
+            else:
+                web.fuellevellights1[driver.CtrlNum]='⣿'*driver.fuellevel
+                web.fuellevellights2[driver.CtrlNum]=''
+            web.fuellevel[driver.CtrlNum]=driver.fuellevel
             if driver.fuellevel > 0:
                 self.fuelbar[pos].setStyleSheet("QProgressBar{ color: white; background-color: black; border: 5px solid black; border-radius: 10px; text-align: center}\
-                                                 QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (driver.fuellevel))) + " red, stop: 1 #550000); }")
+                                                QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (driver.fuellevel))) + " red, stop: 1 #550000); }")
+            #Pitcount
             self.pits[pos].display(driver.pitcount)
+            web.pits[driver.CtrlNum]=driver.pitcount
         #Race controlling
         if hasattr(self, 'leader') and self.session.session != None:
             # Check if race is over
@@ -1072,13 +1110,94 @@ class RmsDriver(QObject):
             self.lapcount += 1
         self.time = timer.timestamp
         
+#~ class FlaskThread(QThread):
+    #~ def __init__(self, application):
+        #~ QThread.__init__(self)
+        #~ self.application = application
 
+    #~ def __del__(self):
+        #~ self.wait()
+
+    #~ def run(self):
+        #~ self.application.run(port=PORT)
+        
+#~ def provide_GUI_for(w, qtapp, application):
+    
+    #~ #webapp = FlaskThread(application)
+
+
+    #~ return qtapp.exec_()       
+class Webpage:
+    def __init__(self):
+        self.app = Flask(__name__)
+        self.position={}
+        self.totaltime={}
+        self.name={}
+        self.laps={}
+        self.laptime={}
+        self.bestlaptime={}
+        self.fuellevel={}
+        self.fuellevellights1={}
+        self.fuellevellights2={}
+        self.pits={}
+        for ctrl in range (1,7):
+            self.position[ctrl]='#'+str(ctrl)
+            self.totaltime[ctrl]='-.--'
+            self.name[ctrl]='Driver'+str(ctrl)
+            self.laps[ctrl]=0
+            self.laptime[ctrl]='-.--'
+            self.bestlaptime[ctrl]='-.--'
+            self.fuellevel[ctrl]=15
+            self.fuellevellights1[ctrl]='⣿⣿⣿⣿⣿'
+            self.fuellevellights2[ctrl]='⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿'
+            self.pits[ctrl]=0
+            
+
+        @self.app.route("/")
+        def hello():
+            return '''
+            <html>
+                <head>
+                    <title>DriverCockpit</title>
+                </head>
+                <body>
+                    <h1>Hello!</h1>
+                </body>
+            </html>'''
+        @self.app.route('/<int:ctrl>')
+        def show_controller(ctrl):
+            # show the user profile for that user
+            if 1<= ctrl <=6:
+                return render_template('index.html', title='Home', ctrl=ctrl, position=self.position[ctrl], totaltime=self.totaltime[ctrl], name=self.name[ctrl], laps=self.laps[ctrl], laptime=self.laptime[ctrl], bestlaptime=self.bestlaptime[ctrl], fuellevel=self.fuellevel[ctrl],  fuellevellights1=self.fuellevellights1[ctrl], fuellevellights2=self.fuellevellights2[ctrl], pits=self.pits[ctrl])
+            else:
+                return  '''
+            <html>
+                <head>
+                    <title>DriverCockpit</title>
+                </head>
+                <body>
+                    <h1>No Website</h1>
+                </body>
+            </html>'''
+            
+        
 if __name__ == '__main__':
     audio=Audio()
+    
     app = QApplication(sys.argv)
-
+        
     w = Rms()
     w.showMaximized()
+    
+    web=Webpage()
+    webapp_thread=Thread(target=web.app.run, kwargs={'port':5000,'host':'0.0.0.0'})
+    webapp_thread.start()
+    
     w.run()
-
+        
+    app.aboutToQuit.connect(webapp_thread.stop)
+    
     sys.exit(app.exec_())
+
+#    sys.exit(provide_GUI_for(w, app, webapp)
+#    startGUI(webapp_thread, qtapp_thread)
