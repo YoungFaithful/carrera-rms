@@ -188,7 +188,8 @@ class Rms(QMainWindow):
     def __init__(self):
         super().__init__()
         self.shutdown = False
-        self.setStyleSheet("QMainWindow{background: #282828;}")
+        self.setStyleSheet("QMainWindow{background: #282828;} QLCDNumber{ border:1px solid black;  background-color: black} QLabel{border:2px; color: #969696} QPushButton{border:1px solid #969696;  color:#969696 ; background-color:#282828;  border-radius: 0px;} QPushButton:pressed {  color:black ; background-color:#969696;}")
+        
         # Counter for sleeping before exiting
         self.cuoffcounter=0
         if len(sys.argv) == 2:
@@ -581,6 +582,7 @@ class RmsFrame(QFrame):
         self.fuelbar = {}
         self.pits = {}
         self.audio=Audio()
+        
 #        QBAcolor = QByteArray()
 #        QBAcolor.append('color')
 #        self.animation = anim = QPropertyAnimation(self, QBAcolor, self)
@@ -594,7 +596,7 @@ class RmsFrame(QFrame):
         self.vLayout = QVBoxLayout(self)
         self.hBtnLayout = QHBoxLayout()
         self.vLayout.addLayout(self.hBtnLayout)
-        self.setStyleSheet("QPushButton{background-color: #282828; color: white}")
+        
 # Add driver to grid
         self.addDriverBtn = QPushButton('(A)dd Driver')
         self.addDriverKey = QShortcut(QKeySequence("a"), self)
@@ -686,7 +688,6 @@ class RmsFrame(QFrame):
         #self.racemode.setStyleSheet("QLabel{  background-color: grey; center; color: blue; font: 30pt}")
         #self.vLayout.addWidget(self.racemode)
         #self.vLayout.setAlignment(self.racemode, Qt.AlignBottom)
-        self.setStyleSheet("QLabel{color: #a9a9a9}")
 
 
     def buildGrid(self):
@@ -766,7 +767,7 @@ class RmsFrame(QFrame):
         self.posFont = QFont()
         self.posFont.setPointSize(50)
         self.posFont.setBold(True)
-        self.driverPos[driverRow] = QLabel(driver.getName())
+        self.driverPos[driverRow] = QLabel('#'+str(driver.CtrlNum))
         self.driverPos[driverRow].setStyleSheet("QLabel{  border-color: black;  background-color: black; color: yellow}")
         self.driverPos[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.driverPos[driverRow].setFont(self.posFont)
@@ -783,7 +784,7 @@ class RmsFrame(QFrame):
         self.totalFont = QFont()
         self.totalFont.setPointSize(30)
         self.totalFont.setBold(True)
-        self.totalTime[driverRow] = QLabel('00:00')
+        self.totalTime[driverRow] = QLabel('--:---')
         self.totalTime[driverRow].setStyleSheet("QLabel{  border-color: black;  background-color: black; color:yellow}")
         self.totalTime[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.totalTime[driverRow].setFont(self.totalFont)
@@ -797,7 +798,7 @@ class RmsFrame(QFrame):
         self.bestlaptime[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.mainLayout.addWidget(self.bestlaptime[driverRow], driverRow, 5)
         self.fuelbar[driverRow] = driver.getFuelBar()
-        self.fuelbar[driverRow].setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        self.fuelbar[driverRow].setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
         self.mainLayout.addWidget(self.fuelbar[driverRow], driverRow, 6)
         self.pits[driverRow] = driver.getPits()
         self.pits[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
@@ -906,10 +907,12 @@ class RmsFrame(QFrame):
                 t = '+%d Lap%s' % (gap, 's' if gap != 1 else '')
             #Position to qt app and web app
             self.driverPos[pos].setText('#'+str(pos))
-            web.position[driver.CtrlNum]='#'+str(pos)
+            web.position[driver.CtrlNum]=pos
+            web.posdriverctrl[pos]=driver.CtrlNum
             #Totaltime
             self.totalTime[pos].setText(driver.name+'\n'+t)
             web.totaltime[driver.CtrlNum]=t
+            web.time[driver.CtrlNum]=driver.time
         #Sorted by Controller number
         for pos, driver in enumerate(sorted(driversInPlay, key=CtrlNum), start=1):
             #Name
@@ -928,21 +931,23 @@ class RmsFrame(QFrame):
             self.bestlaptime[pos].display(formattime(driver.bestLapTime, False))            
             web.bestlaptime[driver.CtrlNum]=formattime(driver.bestLapTime, True)
             #Fuelbar
-            self.fuelbar[pos].setValue(driver.fuellevel)
+            self.fuelbar[pos].setText('⣿'*min(5,max(driver.fuellevel-10,0))+'\n'+'⣿'*min(5,max(driver.fuellevel-5,0))+'\n'+'⣿'*min(5,max(driver.fuellevel,0)))
             #Make the dots for the web app
             if driver.fuellevel > 5:
                 web.fuellevellights1[driver.CtrlNum]='⣿⣿⣿⣿⣿'
                 web.fuellevellights2[driver.CtrlNum]='⣿'*(driver.fuellevel-5)
+                self.fuelbar[pos].setStyleSheet("QLabel{  border-color: black;  background-color: black; color: #00CB14}")
             else:
                 web.fuellevellights1[driver.CtrlNum]='⣿'*driver.fuellevel
                 web.fuellevellights2[driver.CtrlNum]=''
+                self.fuelbar[pos].setStyleSheet("QLabel{  border-color: black;  background-color: black; color: red}")
             web.fuellevel[driver.CtrlNum]=driver.fuellevel
-            if driver.fuellevel > 0:
-                self.fuelbar[pos].setStyleSheet("QProgressBar{ color: white; background-color: black;   text-align: center}\
-                                                QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (driver.fuellevel))) + " red, stop: 1 #550000); }")
-            #Pitcount
+                #self.fuelbar[pos].setStyleSheet("QProgressBar{ color: white; background-color: black;   text-align: center}\
+                #                                QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (driver.fuellevel))) + " red, stop: 1 #550000); }")
+                #Pitcount
             self.pits[pos].display(driver.pitcount)
             web.pits[driver.CtrlNum]=driver.pitcount
+            web.driversinplay=len(driversInPlay)
         #Race controlling
         if hasattr(self, 'leader') and self.session.session != None:
             # Check if race is over
@@ -963,18 +968,21 @@ class RmsFrame(QFrame):
                         self.clearCU()
                         self.session.sessionOver()
             elif self.session.type == 'Timed':
-                if self.leader.time - self.start > self.session.amount * 60000:
-                    self.end=self.leader.time
-                    self.racestop=True
-                    for driver in self.driverArr:
-                        if driver.time and driver.time < self.end:
-                            self.racestop=False
-                    if self.racestop:
-                        self.racestart()
-                        self.session.saveSessionData(driversInPlay)
-                        self.clearCU()
-                        self.session.sessionOver()
+                self.session.lapcountup=True
+                if self.leader.time:
+                    if self.leader.time - self.start > self.session.amount * 60000:
+                        self.end=self.leader.time
+                        self.racestop=True
+                        for driver in self.driverArr:
+                            if driver.time and driver.time < self.end:
+                                self.racestop=False
+                        if self.racestop:
+                            self.racestart()
+                            self.session.saveSessionData(driversInPlay)
+                            self.clearCU()
+                            self.session.sessionOver()
             elif self.session.type == None:
+                self.session.lapcountup=True
                 self.session.session = None
                 self.showLeaderboard()
     #Show Leaderboard at the end
@@ -989,11 +997,12 @@ class RaceSession(QObject):
         self.session = None
         self.sessionSteps = ['Practice', 'Qualification', 'Race']
         # Just for displaying the remaining laps
-        self.lapcountup=False
+        self.lapcountup=True
 
     def setRace(self, raceDict):
         self.leaderboard = {}
         self.raceDict = raceDict
+        print('Set Race')
         for stepIdx, step in enumerate(self.sessionSteps):
             if step in raceDict:
                 self.type = raceDict[step]['mode']
@@ -1005,6 +1014,7 @@ class RaceSession(QObject):
     def sessionOver(self):
         for step in self.sessionSteps:
             self.currentStep += 1
+            print(self.currentStep)
             if len(self.sessionSteps) > self.currentStep:
                 if self.sessionSteps[self.currentStep] in self.raceDict:
                     self.session = self.sessionSteps[self.currentStep]
@@ -1012,7 +1022,7 @@ class RaceSession(QObject):
                     self.type = self.raceDict[self.sessionSteps[self.currentStep]]['mode']
                     break
             else:
-                self.type = None
+                self.type = 'Practice'
                 self.session = 'Race Finished'
 
     def saveSessionData(self, driverArr):
@@ -1105,40 +1115,46 @@ class RmsDriver(QObject):
         self.nameBtn = QPushButton(self.name + '\n' + 'Ctrl: ' + str(self.CtrlNum))
         self.nameBtn.setToolTip('Click to change driver name')
         self.nameBtn.setFont(self.nameFont)
-        self.nameBtn.setStyleSheet("QPushButton {  color: yellow; background-color: black}")
+        self.nameBtn.setStyleSheet("QPushButton {  border:1px solid black; color: yellow; background-color: black;  border-radius: 0px;}")
 
 
         self.lapCountLCD = QLCDNumber(3)
-        self.lapCountLCD.setStyleSheet("QLCDNumber{  background-color: black}")
+        self.lapCountLCD.setSegmentStyle(QLCDNumber.Flat)
+
         lcdPalette = self.lapCountLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.lapCountLCD.setPalette(lcdPalette)
         self.lapCountLCD.display(self.lapcount)
 
         self.bestLapLCD = QLCDNumber()
-        self.bestLapLCD.setStyleSheet("QLCDNumber{  background-color: black}")
+        self.bestLapLCD.setSegmentStyle(QLCDNumber.Flat)
+
         lcdPalette = self.bestLapLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.bestLapLCD.setPalette(lcdPalette)
         self.bestLapLCD.display(self.bestLapTime)
 
         self.lapLCD = QLCDNumber()
-        self.lapLCD.setStyleSheet("QLCDNumber{  background-color: black}")
+        self.lapLCD.setSegmentStyle(QLCDNumber.Flat)
+
         lcdPalette = self.lapLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.lapLCD.setPalette(lcdPalette)
         self.lapLCD.display(self.lapTime)
-
-        self.fuelbar = QProgressBar()
-        self.fuelbar.setOrientation(Qt.Horizontal)
-        self.fuelbar.setStyleSheet("QProgressBar{ color: white; background-color: black;   text-align: center}\
-                                    QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (self.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (self.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (self.fuellevel))) + " red, stop: 1 #550000); }")
-        self.fuelbar.setMinimum(0)
-        self.fuelbar.setMaximum(15)
-        self.fuelbar.setValue(self.fuellevel)
+        
+        self.fuelFont = QFont()
+        self.fuelFont.setPointSize(28)
+        self.fuelFont.setBold(False)
+        self.fuelbar = QLabel()
+        self.fuelbar.setText('⣿'*min(5,max(15-10,0)) + '\n' + '⣿'*min(5,max(15-5,0)) + '\n' + '⣿'*min(5,max(15,0)))
+            
+        self.fuelbar.setStyleSheet("QLabel{  border-color: black;  background-color: black; color: #00CB14}")
+        self.fuelbar.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.fuelbar.setFont(self.fuelFont)
 
         self.pitCountLCD = QLCDNumber(2)
-        self.pitCountLCD.setStyleSheet("QLCDNumber{  background-color: black}")
+        self.pitCountLCD.setSegmentStyle(QLCDNumber.Flat)
+
         lcdPalette = self.pitCountLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.pitCountLCD.setPalette(lcdPalette)
@@ -1215,7 +1231,9 @@ class Webpage:
     def __init__(self):
         self.app = Flask(__name__)
         self.position={}
+        self.posdriverctrl={}
         self.totaltime={}
+        self.time={}
         self.name={}
         self.laps={}
         self.laptime={}
@@ -1224,17 +1242,21 @@ class Webpage:
         self.fuellevellights1={}
         self.fuellevellights2={}
         self.pits={}
+        self.driversinplay=6
         for ctrl in range (1,7):
-            self.position[ctrl]='#'+str(ctrl)
+            self.position[ctrl]=7
             self.totaltime[ctrl]='-.--'
+            self.time[ctrl]=0
             self.name[ctrl]='Driver'+str(ctrl)
             self.laps[ctrl]=0
             self.laptime[ctrl]='-.--'
             self.bestlaptime[ctrl]='-.--'
             self.fuellevel[ctrl]=15
-            self.fuellevellights1[ctrl]='⣿⣿⣿⣿⣿'
-            self.fuellevellights2[ctrl]='⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿'
+            self.fuellevellights1[ctrl]='⣿'*5
+            self.fuellevellights2[ctrl]='⣿'*10
             self.pits[ctrl]=0
+        for pos in range (1,7):
+            self.posdriverctrl[pos]=7
             
 
         @self.app.route("/")
@@ -1251,8 +1273,34 @@ class Webpage:
         @self.app.route('/<int:ctrl>')
         def show_controller(ctrl):
             # show the user profile for that user
+            # Define the displayed players before and after your position
+            if self.position[ctrl]==1:
+                self.positionbefore=''
+                self.positionbeforen=''
+            elif self.position[ctrl]<=self.driversinplay:
+                self.posbef=self.posdriverctrl[self.position[ctrl]-1]
+                if self.laps[ctrl]==self.laps[self.posbef]:
+                    self.positionbefore='-'+formattime((self.time[ctrl]-self.time[self.posbef]), False)
+                else:
+                    self.positionbefore='-'+str(abs(self.laps[self.posbef]-self.laps[ctrl]))+' Lap(s)'
+                self.positionbeforen='↑ '+self.name[self.posbef]
+               #print(self.name[self.posbef]+' -'+formattime(self.time[self.posbef]-self.time[ctrl], False))
+            else:
+                self.gap=self.totaltime[ctrl]
+                self.positionbefore=''
+                self.positionbeforen='Not in Play'
+            if self.position[ctrl]<self.driversinplay:
+                self.posaft=self.posdriverctrl[self.position[ctrl]+1]
+                if self.laps[ctrl]==self.laps[self.posaft]:
+                    self.positionafter='+'+formattime(self.time[self.posaft]-self.time[ctrl],False)
+                else:
+                    self.positionafter='+'+str(abs(self.laps[ctrl]-self.laps[self.posaft]))+' Lap(s)'
+                self.positionaftern='↓ '+self.name[self.posaft]
+            else:
+                self.positionafter=''
+                self.positionaftern=''
             if 1<= ctrl <=6:
-                return render_template('index.html', title='Home', ctrl=ctrl, position=self.position[ctrl], totaltime=self.totaltime[ctrl], name=self.name[ctrl], laps=self.laps[ctrl], laptime=self.laptime[ctrl], bestlaptime=self.bestlaptime[ctrl], fuellevel=self.fuellevel[ctrl],  fuellevellights1=self.fuellevellights1[ctrl], fuellevellights2=self.fuellevellights2[ctrl], pits=self.pits[ctrl])
+                return render_template('index.html', title='Home', ctrl=ctrl, positionbeforen=self.positionbeforen, positionbefore=self.positionbefore, positionafter=self.positionafter, positionaftern=self.positionaftern, position=str(self.position[ctrl]), totaltime=self.totaltime[ctrl], name=self.name[ctrl], laps=self.laps[ctrl], laptime=self.laptime[ctrl], bestlaptime=self.bestlaptime[ctrl], fuellevel=self.fuellevel[ctrl],  fuellevellights1=self.fuellevellights1[ctrl], fuellevellights2=self.fuellevellights2[ctrl], pits=self.pits[ctrl])
             else:
                 return  '''
             <html>
