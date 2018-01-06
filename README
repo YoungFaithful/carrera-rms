@@ -23,6 +23,7 @@ for example in Ubuntu:
 promt>  python3 rms.py dev/ttyUSB0
   
   ensure user has the rights to write and read ttyUSB0 otherwise give him rights to do so or use sudo
+  promt> sudo chmod a+rwx /dev/ttyUSB0
 
 or
 
