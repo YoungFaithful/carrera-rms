@@ -6,6 +6,10 @@
 from flask import (Flask, render_template)
 PORT=5000
 
+#For QR-Code
+from qrcode import QRCode
+import socket
+
 #For threading
 from threading import Thread
 
@@ -66,6 +70,9 @@ from carreralib import ControlUnit
 #Necessary for TimeoutErrorHandling
 import carreralib
 import sys, os
+if os.name != "nt":
+    import fcntl
+    import struct
 # For Sound
 import vlc
 # To wait
@@ -180,8 +187,8 @@ class StartLights(QWidget):
 class Rms(QMainWindow):
     def __init__(self):
         super().__init__()
-
         self.shutdown = False
+        self.setStyleSheet("QMainWindow{background: #282828;}")
         # Counter for sleeping before exiting
         self.cuoffcounter=0
         if len(sys.argv) == 2:
@@ -233,6 +240,7 @@ class Rms(QMainWindow):
         self.cu = ControlUnit(device, timeout = 1.0)
         self.cuVersion = self.cu.version()
         self.initUI()
+
 
     def initUI(self):
         self.startLights = StartLights()
@@ -363,7 +371,76 @@ class CtrlDialog(QDialog):
             else:
                 self.newDriverArr[cellNum] = self.driverArr[cellNum]
         self.accept()
- 
+
+class QrCodeDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Show QRCode')
+        self.setupUI()
+        self.qr = QRCode(
+        version=1,
+        error_correction=None,
+        box_size=10,
+        border=4,
+        )
+        self.qr.add_data(self.get_lan_ip()+':'+PORT+'/')
+        self.qr.make(fit=True)
+
+        self.img = self.qr.make_image(fill_color="black", back_color="white")
+
+    def setupUI(self):
+        self.vlayout = QVBoxLayout(self)
+        self.selectRaceGroup = QGroupBox('Race')
+        self.raceLayout = QHBoxLayout()
+        self.selectRaceGroup.setLayout(self.raceLayout)
+        self.selectRaceCombo = QComboBox()
+        self.selectRaceCombo.addItems(['Timed', 'Laps'])
+        self.selectRaceCombo.currentIndexChanged.connect(self.changeRaceMode)
+        self.raceModeInput = QLineEdit()
+        self.raceModeInput.setMaxLength(4)
+        self.raceModeInput.setText('20')
+        self.raceModeLabel = QLabel()
+        self.vlayout.addWidget(self.selectRaceGroup)
+        self.raceLayout.addWidget(self.selectRaceCombo)
+        self.raceLayout.addWidget(self.raceModeInput)
+        self.raceLayout.addStretch(1)
+        self.raceLayout.addWidget(self.raceModeLabel)
+        self.selectRaceCombo.setCurrentIndex(1)
+
+        self.cancelBtn = QPushButton('Cancel')
+        self.cancelBtn.clicked.connect(self.close)
+        self.buttonLayout = QHBoxLayout()
+        self.vlayout.addLayout(self.buttonLayout)
+        self.buttonLayout.addWidget(self.startRaceBtn)
+        self.buttonLayout.addWidget(self.cancelBtn)
+
+    def get_interface_ip(ifname):
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        return socket.inet_ntoa(fcntl.ioctl(self.s.fileno(), 0x8915, struct.pack('256s',
+                                ifname[:15]))[20:24])
+
+    def get_lan_ip():
+        self.ip = socket.gethostbyname(socket.gethostname())
+        if self.ip.startswith("127.") and os.name != "nt":
+            self.interfaces = [
+                "eth0",
+                "eth1",
+                "eth2",
+                "wlan0",
+                "wlan1",
+                "wifi0",
+                "ath0",
+                "ath1",
+                "ppp0",
+                ]
+            for ifname in self.interfaces:
+                try:
+                    self.ip = get_interface_ip(ifname)
+                    break
+                except IOError:
+                    pass
+        return self.ifip
+
 class RaceModeDialog(QDialog):
     def __init__(self):
         super().__init__()
@@ -517,6 +594,7 @@ class RmsFrame(QFrame):
         self.vLayout = QVBoxLayout(self)
         self.hBtnLayout = QHBoxLayout()
         self.vLayout.addLayout(self.hBtnLayout)
+        self.setStyleSheet("QPushButton{background-color: #282828; color: white}")
 # Add driver to grid
         self.addDriverBtn = QPushButton('(A)dd Driver')
         self.addDriverKey = QShortcut(QKeySequence("a"), self)
@@ -605,17 +683,19 @@ class RmsFrame(QFrame):
        # Session Info
        # self.racemode = QLabel('No Race Started')
         # self.racemode.setAlignment(Qt.AlignCenter)
-        #self.racemode.setStyleSheet("QLabel{ border-radius: 10px; background-color: grey; center; color: blue; font: 30pt}")
+        #self.racemode.setStyleSheet("QLabel{  background-color: grey; center; color: blue; font: 30pt}")
         #self.vLayout.addWidget(self.racemode)
         #self.vLayout.setAlignment(self.racemode, Qt.AlignBottom)
+        self.setStyleSheet("QLabel{color: #a9a9a9}")
 
 
     def buildGrid(self):
         self.mainLayout = QGridLayout()
-        self.mainLayout.setSpacing(10)
-        self.mainLayout.setHorizontalSpacing(10)
+        self.mainLayout.setSpacing(2)
+        self.mainLayout.setHorizontalSpacing(5)
         self.headerFont = QFont()
         self.headerFont.setPointSize(14)
+        
         self.headerFont.setBold(True)
         self.labelArr = [
         #'Pos', 
@@ -656,7 +736,9 @@ class RmsFrame(QFrame):
             self.session.setRace(self.setupRaceDlg.getRaceModeInfo())
             self.racemode.setText(self.session.session + ' ' + str(self.session.amount) + ' ' + self.session.type)
             self.clearCU()
-            self.cu.start()
+            self.racestart()
+            time.sleep(0.5)
+            self.racestart()
         else:
             self.setupRaceDlg.close()
 
@@ -682,10 +764,10 @@ class RmsFrame(QFrame):
             return
         driver = self.driverArr[driverRow - 1]
         self.posFont = QFont()
-        self.posFont.setPointSize(25)
+        self.posFont.setPointSize(50)
         self.posFont.setBold(True)
         self.driverPos[driverRow] = QLabel(driver.getName())
-        self.driverPos[driverRow].setStyleSheet("QLabel{ border-radius: 10px; border-color: black; border: 5px solid black; background-color: white}")
+        self.driverPos[driverRow].setStyleSheet("QLabel{  border-color: black;  background-color: black; color: yellow}")
         self.driverPos[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.driverPos[driverRow].setFont(self.posFont)
         self.mainLayout.addWidget(self.driverPos[driverRow], driverRow ,0)
@@ -699,10 +781,10 @@ class RmsFrame(QFrame):
         self.lapcount[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.mainLayout.addWidget(self.lapcount[driverRow], driverRow, 3)
         self.totalFont = QFont()
-        self.totalFont.setPointSize(25)
+        self.totalFont.setPointSize(30)
         self.totalFont.setBold(True)
         self.totalTime[driverRow] = QLabel('00:00')
-        self.totalTime[driverRow].setStyleSheet("QLabel{ border-radius: 10px; border-color: black; border: 5px solid black; background-color: white}")
+        self.totalTime[driverRow].setStyleSheet("QLabel{  border-color: black;  background-color: black; color:yellow}")
         self.totalTime[driverRow].setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.totalTime[driverRow].setFont(self.totalFont)
         self.mainLayout.addWidget(self.totalTime[driverRow], driverRow, 1)
@@ -823,15 +905,15 @@ class RmsFrame(QFrame):
                 gap = self.leader.lapcount - driver.lapcount
                 t = '+%d Lap%s' % (gap, 's' if gap != 1 else '')
             #Position to qt app and web app
-            self.driverPos[pos].setText('#'+str(pos)+'\n'+driver.name)
+            self.driverPos[pos].setText('#'+str(pos))
             web.position[driver.CtrlNum]='#'+str(pos)
             #Totaltime
-            self.totalTime[pos].setText(t)
+            self.totalTime[pos].setText(driver.name+'\n'+t)
             web.totaltime[driver.CtrlNum]=t
         #Sorted by Controller number
         for pos, driver in enumerate(sorted(driversInPlay, key=CtrlNum), start=1):
             #Name
-            self.nameBtn[pos].setText(driver.name + '\n' + str(driver.CtrlNum))
+            self.nameBtn[pos].setText(driver.name)
             web.name[driver.CtrlNum]=driver.name
             if self.session.lapcountup or self.session.amount == None:
                 self.lapcount[pos].display(driver.lapcount)
@@ -856,7 +938,7 @@ class RmsFrame(QFrame):
                 web.fuellevellights2[driver.CtrlNum]=''
             web.fuellevel[driver.CtrlNum]=driver.fuellevel
             if driver.fuellevel > 0:
-                self.fuelbar[pos].setStyleSheet("QProgressBar{ color: white; background-color: black; border: 5px solid black; border-radius: 10px; text-align: center}\
+                self.fuelbar[pos].setStyleSheet("QProgressBar{ color: white; background-color: black;   text-align: center}\
                                                 QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (driver.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (driver.fuellevel))) + " red, stop: 1 #550000); }")
             #Pitcount
             self.pits[pos].display(driver.pitcount)
@@ -1023,25 +1105,25 @@ class RmsDriver(QObject):
         self.nameBtn = QPushButton(self.name + '\n' + 'Ctrl: ' + str(self.CtrlNum))
         self.nameBtn.setToolTip('Click to change driver name')
         self.nameBtn.setFont(self.nameFont)
-        self.nameBtn.setStyleSheet("QPushButton { border-radius: 10px; color: yellow; background-color: black}")
+        self.nameBtn.setStyleSheet("QPushButton {  color: yellow; background-color: black}")
 
 
         self.lapCountLCD = QLCDNumber(3)
-        self.lapCountLCD.setStyleSheet("QLCDNumber{ border-radius: 10px; background-color: black}")
+        self.lapCountLCD.setStyleSheet("QLCDNumber{  background-color: black}")
         lcdPalette = self.lapCountLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.lapCountLCD.setPalette(lcdPalette)
         self.lapCountLCD.display(self.lapcount)
 
         self.bestLapLCD = QLCDNumber()
-        self.bestLapLCD.setStyleSheet("QLCDNumber{ border-radius: 10px; background-color: black}")
+        self.bestLapLCD.setStyleSheet("QLCDNumber{  background-color: black}")
         lcdPalette = self.bestLapLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.bestLapLCD.setPalette(lcdPalette)
         self.bestLapLCD.display(self.bestLapTime)
 
         self.lapLCD = QLCDNumber()
-        self.lapLCD.setStyleSheet("QLCDNumber{ border-radius: 10px; background-color: black}")
+        self.lapLCD.setStyleSheet("QLCDNumber{  background-color: black}")
         lcdPalette = self.lapLCD.palette()
         lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.lapLCD.setPalette(lcdPalette)
@@ -1049,16 +1131,16 @@ class RmsDriver(QObject):
 
         self.fuelbar = QProgressBar()
         self.fuelbar.setOrientation(Qt.Horizontal)
-        self.fuelbar.setStyleSheet("QProgressBar{ color: white; background-color: black; border: 5px solid black; border-radius: 10px; text-align: center}\
+        self.fuelbar.setStyleSheet("QProgressBar{ color: white; background-color: black;   text-align: center}\
                                     QProgressBar::chunk { background: qlineargradient(x1: 1, y1: 0.5, x2: 0, y2: 0.5, stop: 0 #00AA00, stop: " + str(0.92 - (1 / (self.fuellevel))) + " #22FF22, stop: " + str(0.921 - (1 / (self.fuellevel))) + " #22FF22, stop: " + str(1.001 - (1 / (self.fuellevel))) + " red, stop: 1 #550000); }")
         self.fuelbar.setMinimum(0)
         self.fuelbar.setMaximum(15)
         self.fuelbar.setValue(self.fuellevel)
 
         self.pitCountLCD = QLCDNumber(2)
-        self.pitCountLCD.setStyleSheet("QLCDNumber{ border-radius: 10px; background-color: black}")
+        self.pitCountLCD.setStyleSheet("QLCDNumber{  background-color: black}")
         lcdPalette = self.pitCountLCD.palette()
-        lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 0, 0))
+        lcdPalette.setColor(lcdPalette.WindowText, QColor(255, 255, 0))
         self.pitCountLCD.setPalette(lcdPalette)
         self.pitCountLCD.display(self.pitcount)
    
@@ -1126,7 +1208,9 @@ class RmsDriver(QObject):
     #~ #webapp = FlaskThread(application)
 
 
-    #~ return qtapp.exec_()       
+    #~ return qtapp.exec_()
+
+       
 class Webpage:
     def __init__(self):
         self.app = Flask(__name__)
